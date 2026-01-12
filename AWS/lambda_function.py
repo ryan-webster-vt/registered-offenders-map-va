@@ -78,10 +78,14 @@ def handler(event, context):
     # Read locality population data from S3
     s3 = boto3.client('s3')
     bucket_name = 'registered-offender-bucket'
-    file_key = 'total_population.csv'
-    obj = s3.get_object(Bucket=bucket_name, Key=file_key)
+    
+    locality_population_obj = s3.get_object(Bucket=bucket_name, Key='locality_population.csv')
+    locality_population_df = pd.read_csv(locality_population_obj['Body'])
 
-    population_df = pd.read_csv(obj['Body'])
+    # Read offender population data from S3 to concat to
+    offender_population_obj = s3.get_object(Bucket = bucket_name, Key = 'offender_population.xlsx')
+    offender_populataion_df = pd.read_excel(BytesIO(offender_population_obj['Body'].read()))
+    
 
     # Initialize Chrome driver
     chrome_options = ChromeOptions()
@@ -112,8 +116,8 @@ def handler(event, context):
 
     results = []
     
-    for i, county in enumerate(population_df['locality']):
-        print(f"{i+1} / {len(population_df['locality'])}")
+    for i, county in enumerate(locality_population_df['locality']):
+        print(f"{i+1} / {len(locality_population_df['locality'])}")
         time.sleep(0.25)
 
         url_list = build_county_url(county)
@@ -122,7 +126,7 @@ def handler(event, context):
         print(f'{county} successfully scraped')
         print(offender_count_list)
         
-        population = population_df.loc[population_df['locality'] == county, 'population'].values[0]
+        population = locality_population_df.loc[locality_population_df['locality'] == county, 'population'].values[0]
 
         total_offender_count = offender_count_list[0]
         total_offender_count_homeless = offender_count_list[1]
@@ -155,13 +159,17 @@ def handler(event, context):
     
     result_df = pd.DataFrame(results)
 
+    result_df['date'] = date.today()
+
+    # Append results to master offender df
+    result_df = pd.concat([result_df, offender_populataion_df])
+
     # Convert DataFrame to CSV string
     xlsx_buffer = BytesIO()
     result_df.to_excel(xlsx_buffer, index=False)
 
     # Upload to S3
     s3 = boto3.client('s3')
-    today = date.today()
-    s3.put_object(Bucket=bucket_name, Key=f'offender_population_{today}.xlsx', Body=xlsx_buffer.getvalue())
+    s3.put_object(Bucket=bucket_name, Key=f'offender_population.xlsx', Body=xlsx_buffer.getvalue())
 
     return 'Success!!!'
