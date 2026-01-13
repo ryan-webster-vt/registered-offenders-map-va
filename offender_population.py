@@ -83,7 +83,7 @@ def main():
     
     for i, county in enumerate(pop_df['locality']):
         print(f"{i+1} / {len(pop_df['locality'])}")
-        time.sleep(random.uniform(2.5, 4.5))
+        time.sleep(1)
 
         url_list = build_county_url(county)
         offender_count_list = scrape_offender_count(driver, url_list)
